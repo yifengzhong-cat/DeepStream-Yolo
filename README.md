@@ -64,6 +64,7 @@ NVIDIA DeepStream SDK 8.0 / 7.1 / 7.0 / 6.4 / 6.3 / 6.2 / 6.1.1 / 6.1 / 6.0.1 / 
 * [YOLO-Master usage](docs/YOLOMaster.md)
 * [Using your custom model](docs/customModels.md)
 * [Multiple YOLO GIEs](docs/multipleGIEs.md)
+* [MengDong Cloud API (DeepStream-based REST service)](mengdong_cloud/README.md)
 
 ##
 
