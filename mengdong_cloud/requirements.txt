@@ -9,6 +9,6 @@ Pillow>=10.2.0
 python-multipart==0.0.22
 aiofiles==23.2.1
 apscheduler==3.10.4
-onnx>=1.14.0
+onnx>=1.17.0
 # DeepStream Python 绑定 (pyds) 和 GStreamer Python 绑定 (PyGObject)
 # 已包含在 NVIDIA DeepStream Docker 基础镜像中，无需额外安装
