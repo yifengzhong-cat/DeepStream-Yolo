@@ -129,13 +129,178 @@ docker run -d \
 
 ---
 
-## 3. API 接口文档
+## 3. 手动启动（非 Docker）
+
+如果不使用 Docker，可以直接在宿主机上手动启动服务。Dockerfile 中的启动命令为：
+
+```dockerfile
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "22266"]
+```
+
+以下是手动启动的完整步骤。
+
+### 3.1 前置条件
+
+| 依赖 | 版本要求 | 说明 |
+|------|---------|------|
+| Python | 3.8+ | 推荐 3.10 |
+| pip | 最新版 | `pip install --upgrade pip` |
+| NVIDIA GPU 驱动 | 535+ | `nvidia-smi` 验证 |
+| CUDA | 12.x+ | `nvcc --version` 验证 |
+| DeepStream SDK | 7.1+（可选） | 视频流 DeepStream 管道需要；不安装则自动回退到 OpenCV |
+| GStreamer | 1.16+（可选） | DeepStream 管道需要 |
+
+### 3.2 安装依赖
+
+```bash
+# 进入 mengdong_cloud 目录
+cd mengdong_cloud
+
+# 安装 Python 依赖
+pip install -r requirements.txt
+
+# 如果需要 DeepStream 视频管道，还需安装 pyds（已包含在 DeepStream SDK 中）
+# pip install pyds  # 通常随 DeepStream SDK 自动安装
+```
+
+### 3.3 准备模型文件
+
+将 4 个模型文件放入 `models/` 目录：
+
+```bash
+mkdir -p models
+cp /path/to/model_mengdong_raa_adjusted.pt  models/
+cp /path/to/model_mengdong_small_SRL.pt     models/
+cp /path/to/model_mengdong_tower.pt         models/
+cp /path/to/model_mengdong_scene_album.pt   models/
+```
+
+### 3.4 编译 DeepStream-Yolo 自定义推理插件（可选）
+
+如果需要使用 DeepStream 视频管道（而非 OpenCV 回退），需要编译自定义推理库：
+
+```bash
+# 在 DeepStream-Yolo 项目根目录下编译
+cd /path/to/DeepStream-Yolo
+CUDA_VER=12.6 make -C nvdsinfer_custom_impl_Yolo
+```
+
+编译产物为 `nvdsinfer_custom_impl_Yolo/libnvdsinfer_custom_impl_Yolo.so`。
+
+### 3.5 设置环境变量
+
+手动启动时，模型目录等路径需要指向宿主机上的实际路径（Docker 中默认为 `/app/models`）：
+
+```bash
+# 必须设置（指向宿主机实际路径）
+export MODEL_DIR=./models
+export OUTPUT_DIR=./output
+
+# 可选设置
+export SERVICE_HOST=0.0.0.0
+export SERVICE_PORT=22266
+export DEVICE=0                  # GPU 设备号，"cpu" 表示使用 CPU
+export CONFIDENCE_THRESHOLD=0.5
+export PLATFORM_HOST=http://127.0.0.1:8080
+
+# DeepStream 相关（可选，不设置则视频分析回退到 OpenCV + ultralytics）
+export DEEPSTREAM_YOLO_DIR=/path/to/DeepStream-Yolo
+export DEEPSTREAM_CONFIG_DIR=./ds_configs
+```
+
+### 3.6 启动服务
+
+提供三种等效的手动启动方式：
+
+#### 方式一：使用启动脚本 `run.sh`（推荐）
+
+```bash
+cd mengdong_cloud
+
+# 默认端口 22266
+bash run.sh
+
+# 自定义端口
+bash run.sh --port 8080
+
+# 开发模式（代码变更自动重载）
+bash run.sh --reload
+
+# 查看所有选项
+bash run.sh --help
+```
+
+#### 方式二：直接使用 uvicorn 命令行
+
+这就是 Dockerfile 中 `CMD` 的等效命令：
+
+```bash
+cd mengdong_cloud
+
+# 基本启动（与 Dockerfile CMD 完全等效）
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 22266
+
+# 自定义端口
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8080
+
+# 开发模式（代码变更自动重载）
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 22266 --reload
+
+# 多 worker（生产环境）
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 22266 --workers 4
+```
+
+#### 方式三：使用 `python3 main.py`
+
+```bash
+cd mengdong_cloud
+
+# app/main.py 底部的 __main__ 入口
+python3 -m app.main
+```
+
+### 3.7 验证服务
+
+启动成功后，可通过以下方式验证：
+
+```bash
+# 健康检查
+curl http://localhost:22266/health
+
+# 查看 API 文档（浏览器打开）
+# http://localhost:22266/docs
+
+# 获取算法能力列表
+curl -X POST http://localhost:22266/v1/service/abilities
+```
+
+### 3.8 后台运行
+
+如果需要在后台持续运行（不占用终端）：
+
+```bash
+# 使用 nohup
+nohup bash run.sh > mengdong.log 2>&1 &
+
+# 或使用 nohup + uvicorn
+nohup python3 -m uvicorn app.main:app --host 0.0.0.0 --port 22266 > mengdong.log 2>&1 &
+
+# 查看日志
+tail -f mengdong.log
+
+# 停止服务
+kill $(pgrep -f "uvicorn app.main:app")
+```
+
+---
+
+## 4. API 接口文档
 
 服务启动后可访问自动生成的交互式 API 文档：
 - **Swagger UI**: `http://<服务器IP>:22266/docs`
 - **ReDoc**: `http://<服务器IP>:22266/redoc`
 
-### 3.1 健康检查
+### 4.1 健康检查
 
 - **URL**: `GET /health`
 - **说明**: 检查服务状态和模型加载情况
@@ -151,7 +316,7 @@ docker run -d \
 
 ---
 
-### 3.2 算法能力获取 (4.1.7.1)
+### 4.2 算法能力获取 (4.1.7.1)
 
 - **URL**: `POST /v1/service/abilities`
 - **说明**: 获取当前服务支持的所有算法能力列表
@@ -215,7 +380,7 @@ docker run -d \
 
 ---
 
-### 3.3 视频任务管理 (4.1.7.2)
+### 4.3 视频任务管理 (4.1.7.2)
 
 - **URL**: `POST /v1/service/videoTask`
 - **说明**: 创建、启动、停止或删除视频分析任务
@@ -292,7 +457,7 @@ docker run -d \
 
 ---
 
-### 3.4 分析任务控制 (4.1.7.3)
+### 4.4 分析任务控制 (4.1.7.3)
 
 - **URL**: `POST /v1/service/controlTask`
 - **说明**: 控制已创建的分析任务（启停、删除）
@@ -323,7 +488,7 @@ docker run -d \
 
 ---
 
-### 3.5 图片分析任务 (4.1.7.5)
+### 4.5 图片分析任务 (4.1.7.5)
 
 - **URL**: `POST /v1/service/imageTask`
 - **说明**: 对单张图片进行推理分析，同步返回结果
@@ -409,7 +574,7 @@ docker run -d \
 
 ---
 
-### 3.6 视频分析结果推送 (4.1.7.4)
+### 4.6 视频分析结果推送 (4.1.7.4)
 
 - **说明**: 视频分析过程中，服务会按照配置的 `interval` 间隔，自动向统一视频平台推送分析结果
 - **推送目标**: `{PLATFORM_HOST}/analysis/api/v1/analyseResult`
@@ -447,7 +612,7 @@ docker run -d \
 
 ---
 
-### 3.7 服务保活 (4.1.7.7)
+### 4.7 服务保活 (4.1.7.7)
 
 - **URL**: `POST /analysis/api/v1/keepAlive`
 - **说明**: 接收保活心跳（服务同时会定时向平台发送保活）
@@ -473,7 +638,7 @@ docker run -d \
 
 ---
 
-### 3.8 更新分析ID (4.1.7.8)
+### 4.8 更新分析ID (4.1.7.8)
 
 - **URL**: `POST /analysis/api/v1/updateAnalyseID`
 - **说明**: 更新已有任务的分析ID，自动重新拉流
@@ -499,7 +664,7 @@ docker run -d \
 
 ---
 
-### 3.9 样本数据回传 (4.1.7.6)
+### 4.9 样本数据回传 (4.1.7.6)
 
 - **URL**: `POST /v1/service/uploadSamples`
 - **说明**: 接收样本文件信息
@@ -525,7 +690,7 @@ docker run -d \
 
 ---
 
-## 4. 响应码说明
+## 5. 响应码说明
 
 | 响应码 | 说明 |
 |--------|------|
@@ -538,34 +703,34 @@ docker run -d \
 
 ---
 
-## 5. 部署运维
+## 6. 部署运维
 
-### 5.1 查看日志
+### 6.1 查看日志
 
 ```bash
 docker logs -f mengdong_cloud
 ```
 
-### 5.2 重启服务
+### 6.2 重启服务
 
 ```bash
 docker restart mengdong_cloud
 ```
 
-### 5.3 停止服务
+### 6.3 停止服务
 
 ```bash
 docker stop mengdong_cloud
 ```
 
-### 5.4 删除容器
+### 6.4 删除容器
 
 ```bash
 docker stop mengdong_cloud
 docker rm mengdong_cloud
 ```
 
-### 5.5 更新镜像
+### 6.5 更新镜像
 
 ```bash
 # 停止并删除旧容器
@@ -579,7 +744,7 @@ docker load -i mengdong_cloud.tar
 docker run -d --gpus all -p 22266:22266 --name mengdong_cloud mengdong_cloud:latest
 ```
 
-### 5.6 挂载外部模型目录
+### 6.6 挂载外部模型目录
 
 如果需要替换模型文件而不重新构建镜像：
 
@@ -592,7 +757,7 @@ docker run -d \
   mengdong_cloud:latest
 ```
 
-### 5.7 查看输出视频
+### 6.7 查看输出视频
 
 视频分析任务产生的标注视频保存在容器内 `/app/output/` 目录，也可通过 HTTP 直接下载：
 
@@ -611,7 +776,7 @@ docker run -d \
 
 ---
 
-## 6. 常见问题
+## 7. 常见问题
 
 ### Q1: 服务启动后提示模型加载失败
 
@@ -663,14 +828,15 @@ docker run -d --gpus all -p 8888:22266 --name mengdong_cloud mengdong_cloud:late
 
 ---
 
-## 7. 目录结构
+## 8. 目录结构
 
 ```
 mengdong_cloud/
 ├── Dockerfile              # Docker 镜像构建文件（基于 DeepStream 7.1）
 ├── docker-compose.yml      # Docker Compose 编排文件
 ├── requirements.txt        # Python 依赖
-├── build.sh                # 构建和导出脚本（含 DeepStream-Yolo 文件复制）
+├── build.sh                # Docker 构建和导出脚本（含 DeepStream-Yolo 文件复制）
+├── run.sh                  # 手动启动脚本（非 Docker 环境使用）
 ├── README_DEPLOY.md        # 本部署文档
 ├── app/                    # 应用代码
 │   ├── main.py             # FastAPI 主入口
@@ -706,7 +872,7 @@ mengdong_cloud/
         └── export_yoloV8.py          # YOLOv8 → ONNX 导出脚本
 ```
 
-## 8. DeepStream-Yolo 推理流程
+## 9. DeepStream-Yolo 推理流程
 
 ```
 服务启动
