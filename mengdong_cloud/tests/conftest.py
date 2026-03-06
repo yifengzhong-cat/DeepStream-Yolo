@@ -52,6 +52,18 @@ from app.inference import Detection  # noqa: E402
 
 
 # ----------------------------------------------------------------
+# 测试常量
+# ----------------------------------------------------------------
+
+# 模拟的 DeepStream 配置（每个 algCode 对应一个配置字典）
+_MOCK_DS_CONFIGS = {
+    "010101": {"infer_config_path": "/tmp/fake.txt"},
+    "010102": {"infer_config_path": "/tmp/fake.txt"},
+    "010103": {"infer_config_path": "/tmp/fake.txt"},
+    "010104": {"infer_config_path": "/tmp/fake.txt"},
+}
+
+# ----------------------------------------------------------------
 # Fixtures
 # ----------------------------------------------------------------
 
@@ -97,23 +109,11 @@ def client():
         # model_manager（main 模块和 image_task 模块各有一个引用）
         for mm in (mock_mm, mock_img_mm):
             mm.is_loaded = True
-            mm.loaded_models = {
-                "010101": {}, "010102": {}, "010103": {}, "010104": {},
-            }
-            mm.ds_configs = {
-                "010101": {"infer_config_path": "/tmp/fake.txt"},
-                "010102": {"infer_config_path": "/tmp/fake.txt"},
-                "010103": {"infer_config_path": "/tmp/fake.txt"},
-                "010104": {"infer_config_path": "/tmp/fake.txt"},
-            }
+            mm.loaded_models = {k: {} for k in _MOCK_DS_CONFIGS}
+            mm.ds_configs = dict(_MOCK_DS_CONFIGS)
             mm.load_all_models = MagicMock()
             mm.get_ds_config = MagicMock(
-                side_effect=lambda code: {
-                    "010101": {"infer_config_path": "/tmp/fake.txt"},
-                    "010102": {"infer_config_path": "/tmp/fake.txt"},
-                    "010103": {"infer_config_path": "/tmp/fake.txt"},
-                    "010104": {"infer_config_path": "/tmp/fake.txt"},
-                }.get(code)
+                side_effect=lambda code: _MOCK_DS_CONFIGS.get(code)
             )
             mm.predict = MagicMock(return_value=[])
 
