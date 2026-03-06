@@ -14,7 +14,8 @@
 在仓库根目录执行（示例路径）：
 
 ```bash
-cd /home/runner/work/DeepStream-Yolo/DeepStream-Yolo
+export REPO_ROOT=/home/runner/work/DeepStream-Yolo/DeepStream-Yolo
+cd "${REPO_ROOT}"
 ```
 
 确保以下文件已准备好：
@@ -25,10 +26,11 @@ cd /home/runner/work/DeepStream-Yolo/DeepStream-Yolo
 
 ---
 
-## 2. PT 模型转换为 ENGINE（推荐流程）
+## 2. PT 模型转换为 ENGINE（INT8 流程，本文重点）
 
 > DeepStream 不直接读取 `pt`，通常是 `pt -> onnx -> engine`。
 > 本仓库已提供 YOLOv8 导出脚本：`utils/export_yoloV8.py`。
+> 本节聚焦 INT8。如需 FP16/FP32，可参考仓库 `docs/YOLOv8.md` 与 `docs/customModels.md`。
 
 ### 2.1 导出 ONNX
 
@@ -41,40 +43,68 @@ python3 export_yoloV8.py -w your_model.pt --dynamic --simplify
 生成 `your_model.onnx` 后，拷贝到仓库根目录，例如：
 
 ```bash
-cp your_model.onnx /home/runner/work/DeepStream-Yolo/DeepStream-Yolo/
+cp your_model.onnx "${REPO_ROOT}/"
 ```
 
-### 2.2 修改推理配置
+### 2.2 修改推理配置（INT8）
 
-编辑 `/home/runner/work/DeepStream-Yolo/DeepStream-Yolo/config_infer_primary_yoloV8.txt`：
+编辑 `${REPO_ROOT}/config_infer_primary_yoloV8.txt`：
 
 - `onnx-file=your_model.onnx`
-- `model-engine-file=your_model_b1_gpu0_fp16.engine`（建议文件名与网络模式一致）
+- `model-engine-file=your_model_b1_gpu0_int8.engine`
+- `int8-calib-file=calib.table`
 - `num-detected-classes=<你的类别数>`
-- `network-mode=2`（FP16，常用）
+- `network-mode=1`（INT8）
 
-### 2.3 生成 ENGINE（两种方式）
+### 2.3 准备 INT8 校准数据（PTQ）
+
+在仓库根目录准备校准数据清单（示例）：
+
+```bash
+mkdir -p calibration
+# 放入至少 500 张，建议 1000 张与你的业务分布接近的图片到 calibration/
+find "${REPO_ROOT}/calibration" -type f -name "*.jpg" -print | sort > "${REPO_ROOT}/calibration.txt"
+```
+
+> 推荐使用 `.jpg`。若你的数据是 `.jpeg`/`.png`，请先统一转为 `.jpg` 再生成 `calibration.txt`。  
+> 少于 500 张也可运行，但通常会导致量化误差更大、INT8 精度更不稳定。
+
+设置校准环境变量（DeepStream 读取）：
+
+```bash
+export INT8_CALIB_IMG_PATH="${REPO_ROOT}/calibration.txt"
+export INT8_CALIB_BATCH_SIZE=1
+```
+
+> 如需更快/更稳定的校准，请根据显存提高 `INT8_CALIB_BATCH_SIZE`。  
+> 若未安装 OpenCV，请参考：`${REPO_ROOT}/docs/INT8Calibration.md`
+
+### 2.4 生成 INT8 ENGINE（两种方式）
 
 方式 A（推荐）：第一次运行 `deepstream-app` 自动生成：
 
 ```bash
-deepstream-app -c /home/runner/work/DeepStream-Yolo/DeepStream-Yolo/deepstream_app_config.txt
+deepstream-app -c "${REPO_ROOT}/deepstream_app_config.txt"
 ```
 
-方式 B：使用 `trtexec` 手工生成（按你的模型输入形状调整）：
+方式 B：使用 `trtexec` 手工生成（仅在你已具备 `calib.table` 时）：
 
 ```bash
-trtexec --onnx=your_model.onnx --saveEngine=your_model_b1_gpu0_fp16.engine --fp16
+trtexec --onnx=your_model.onnx \
+  --int8 \
+  --calib="${REPO_ROOT}/calib.table" \
+  --saveEngine=your_model_b1_gpu0_int8.engine
 ```
 
-生成成功后，确认 `model-engine-file` 指向的 engine 文件存在。
+> 如果你还没有 `calib.table`，建议优先使用方式 A（DeepStream 自动完成校准并生成 INT8 engine）。
+> 生成成功后，确认 `model-engine-file` 指向的 engine 文件存在。
 
 ---
 
 ## 3. 启动 mengdong_cloud 服务
 
 ```bash
-cd /home/runner/work/DeepStream-Yolo/DeepStream-Yolo/mengdong_cloud
+cd "${REPO_ROOT}/mengdong_cloud"
 python3 -m pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 22266
 ```
@@ -147,7 +177,7 @@ curl -s -X POST http://127.0.0.1:22266/v1/service/imageTask \
 ffmpeg -rtsp_transport tcp -i rtsp://127.0.0.1:8554/tower-001 \
   -c:v libx264 -pix_fmt yuv420p -an \
   -movflags +faststart \
-  /home/runner/work/DeepStream-Yolo/DeepStream-Yolo/mengdong_cloud/output/tower-001.mp4
+  "${REPO_ROOT}/mengdong_cloud/output/tower-001.mp4"
 ```
 
 如果希望“只封装不转码”（降低 CPU）且输入编码兼容 MP4，可尝试：
@@ -155,10 +185,10 @@ ffmpeg -rtsp_transport tcp -i rtsp://127.0.0.1:8554/tower-001 \
 ```bash
 ffmpeg -rtsp_transport tcp -i rtsp://127.0.0.1:8554/tower-001 \
   -c copy -an \
-  /home/runner/work/DeepStream-Yolo/DeepStream-Yolo/mengdong_cloud/output/tower-001.mp4
+  "${REPO_ROOT}/mengdong_cloud/output/tower-001.mp4"
 ```
 
-> 建议先 `mkdir -p /home/runner/work/DeepStream-Yolo/DeepStream-Yolo/mengdong_cloud/output`
+> 建议先 `mkdir -p "${REPO_ROOT}/mengdong_cloud/output"`
 
 ---
 
@@ -172,4 +202,3 @@ ffmpeg -rtsp_transport tcp -i rtsp://127.0.0.1:8554/tower-001 \
 
 3. **服务返回成功但没有真实推理？**  
    若运行环境找不到 `deepstream-app`，服务会进入 mock 状态。请确认 DeepStream 安装与 `deepstream-app` 可执行。
-

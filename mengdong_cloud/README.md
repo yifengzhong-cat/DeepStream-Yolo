@@ -7,6 +7,7 @@
 - 请先阅读：[`OPERATION_GUIDE_CN.md`](OPERATION_GUIDE_CN.md)
 - 覆盖内容：
   - `pt -> onnx -> engine` 转换与校验
+  - INT8 校准与 INT8 engine 生成
   - FastAPI 服务启动
   - `curl` 命令联调（abilities / videoTask / controlTask / imageTask）
   - 实际视频流推理并保存为 `mp4`
