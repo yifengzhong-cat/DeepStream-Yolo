@@ -2,6 +2,15 @@
 
 该目录提供一个独立的 FastAPI 服务层，用于在 **DeepStream-Yolo** 基础上开放图片、视频、视频流任务接口。
 
+## 全流程文档（中文）
+
+- 请先阅读：[`OPERATION_GUIDE_CN.md`](OPERATION_GUIDE_CN.md)
+- 覆盖内容：
+  - `pt -> onnx -> engine` 转换与校验
+  - FastAPI 服务启动
+  - `curl` 命令联调（abilities / videoTask / controlTask / imageTask）
+  - 实际视频流推理并保存为 `mp4`
+
 ## 启动
 
 ```bash
