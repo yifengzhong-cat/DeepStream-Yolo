@@ -21,6 +21,10 @@ services:
       - KEEPALIVE_INTERVAL=30
       - DEVICE=0
       - CONFIDENCE_THRESHOLD=0.5
+      - DEEPSTREAM_YOLO_DIR=/app/deepstream_yolo
+      - DEEPSTREAM_CONFIG_DIR=/app/ds_configs
+      - DEEPSTREAM_NETWORK_MODE=0
+      - DEEPSTREAM_INFER_SIZE=640
     deploy:
       resources:
         reservations:

@@ -6,6 +6,12 @@ models/*.engine
 # 输出目录
 output/
 
+# DeepStream 生成的配置文件
+ds_configs/
+
+# DeepStream-Yolo 临时构建目录（由 build.sh 创建和清理）
+deepstream_yolo/
+
 # Docker 镜像导出文件
 *.tar
 

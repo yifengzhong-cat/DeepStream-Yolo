@@ -2,7 +2,32 @@
 
 ## 1. 概述
 
-蒙东云端AI分析平台是基于 YOLOv8 的云端AI推理服务，支持视频流分析和图片分析。服务以 Docker 容器方式部署，使用 GPU 加速推理，通过 RESTful API 提供服务。
+蒙东云端AI分析平台是基于 **DeepStream-Yolo + YOLOv8** 的云端AI推理服务。服务以 Docker 容器方式部署，使用 NVIDIA DeepStream SDK 和 TensorRT 进行 GPU 加速推理，通过 RESTful API 提供服务。
+
+### 1.1 DeepStream-Yolo 集成架构
+
+```
+                    ┌─────────────────────────────────────┐
+                    │        蒙东云端AI分析平台              │
+                    │         (FastAPI REST API)            │
+                    ├─────────────┬───────────────────────┤
+                    │  图片分析    │     视频流分析            │
+                    │ (ultralytics)│  (DeepStream 管道)      │
+                    │             │                         │
+                    │ .pt → YOLO  │ .pt → ONNX → TensorRT  │
+                    │  predict()  │  nvinfer (GIE)          │
+                    │             │  NvDsInferParseYolo     │
+                    │             │  libnvdsinfer_custom_   │
+                    │             │    impl_Yolo.so         │
+                    └─────────────┴───────────────────────┘
+```
+
+**关键集成点**（来自 DeepStream-Yolo 项目）：
+
+1. **模型导出** (`utils/export_yoloV8.py`)：将 .pt 模型转换为 DeepStream 兼容的 ONNX 格式，添加 `DeepStreamOutput` 层重排输出为 `[boxes, scores, labels]`
+2. **推理配置** (`config_infer_primary_yoloV8.txt` 格式)：为每个模型生成 DeepStream 推理引擎配置
+3. **自定义解析库** (`nvdsinfer_custom_impl_Yolo/`)：编译为 `libnvdsinfer_custom_impl_Yolo.so`，提供 `NvDsInferParseYolo` 解析函数和 `NvDsInferYoloCudaEngineGet` 引擎创建函数
+4. **GStreamer 管道**：使用 `nvinfer` 元素加载 TensorRT 引擎进行 GPU 推理
 
 ### 1.1 支持的模型
 
@@ -18,8 +43,9 @@
 - Docker 19.03+
 - NVIDIA Docker Runtime（nvidia-docker2）
 - NVIDIA GPU（算力 6.0+，推荐 Tesla T4 / V100 / A100）
-- NVIDIA 驱动 470+
-- CUDA 12.1+
+- NVIDIA 驱动 535+（DeepStream 7.1 要求）
+- CUDA 12.x+
+- DeepStream 7.1+（已包含在 Docker 镜像中）
 
 ---
 
@@ -46,7 +72,7 @@ curl http://localhost:22266/health
 ### 2.2 方式二：源码构建
 
 ```bash
-# 1. 进入项目目录
+# 1. 进入 mengdong_cloud 目录（必须在 DeepStream-Yolo 项目内）
 cd mengdong_cloud
 
 # 2. 将模型文件放入 models/ 目录
@@ -55,10 +81,15 @@ cp /path/to/model_mengdong_small_SRL.pt models/
 cp /path/to/model_mengdong_tower.pt models/
 cp /path/to/model_mengdong_scene_album.pt models/
 
-# 3. 构建并导出镜像（自动生成 mengdong_cloud.tar）
+# 3. 构建并导出镜像（自动完成以下步骤）
+#    - 复制 DeepStream-Yolo 项目文件（nvdsinfer_custom_impl_Yolo, utils）
+#    - 编译 libnvdsinfer_custom_impl_Yolo.so（NvDsInferParseYolo）
+#    - 构建 Docker 镜像
+#    - 导出为 mengdong_cloud.tar
 bash build.sh
 
 # 4. 或使用 docker-compose 直接启动
+#    （需要先手动执行 build.sh 的步骤2复制 DeepStream-Yolo 文件）
 docker-compose up -d
 ```
 
@@ -75,6 +106,13 @@ docker-compose up -d
 | `CONFIDENCE_THRESHOLD` | `0.5` | 默认推理置信度阈值 |
 | `MODEL_DIR` | `/app/models` | 模型文件目录 |
 | `OUTPUT_DIR` | `/app/output` | 输出视频文件目录 |
+| `DEEPSTREAM_YOLO_DIR` | `/app/deepstream_yolo` | DeepStream-Yolo 项目目录（包含编译后的推理插件） |
+| `DEEPSTREAM_CONFIG_DIR` | `/app/ds_configs` | 生成的 DeepStream 配置文件目录 |
+| `DEEPSTREAM_NETWORK_MODE` | `0` | TensorRT 精度模式：0=FP32, 1=INT8, 2=FP16 |
+| `DEEPSTREAM_INFER_SIZE` | `640` | 推理输入尺寸 |
+| `DEEPSTREAM_NMS_IOU_THRESHOLD` | `0.45` | NMS IoU 阈值 |
+| `DEEPSTREAM_PRE_CLUSTER_THRESHOLD` | `0.25` | 预聚类置信度阈值 |
+| `DEEPSTREAM_TOPK` | `300` | 最大检测数量 |
 
 示例：自定义环境变量启动
 
@@ -629,17 +667,18 @@ docker run -d --gpus all -p 8888:22266 --name mengdong_cloud mengdong_cloud:late
 
 ```
 mengdong_cloud/
-├── Dockerfile              # Docker 镜像构建文件
+├── Dockerfile              # Docker 镜像构建文件（基于 DeepStream 7.1）
 ├── docker-compose.yml      # Docker Compose 编排文件
 ├── requirements.txt        # Python 依赖
-├── build.sh                # 构建和导出脚本
+├── build.sh                # 构建和导出脚本（含 DeepStream-Yolo 文件复制）
 ├── README_DEPLOY.md        # 本部署文档
 ├── app/                    # 应用代码
 │   ├── main.py             # FastAPI 主入口
-│   ├── config.py           # 配置文件
+│   ├── config.py           # 配置文件（含 DeepStream 参数）
 │   ├── schemas.py          # 请求/响应数据模型
-│   ├── model_manager.py    # 模型管理器
-│   ├── inference.py        # 推理辅助函数
+│   ├── model_manager.py    # 模型管理器（ONNX 导出 + ultralytics 加载）
+│   ├── inference.py        # 推理辅助函数（图片分析用）
+│   ├── deepstream_config.py # DeepStream 配置文件生成器
 │   ├── routers/            # API 路由
 │   │   ├── abilities.py    # 算法能力接口
 │   │   ├── video_task.py   # 视频任务接口
@@ -649,11 +688,57 @@ mengdong_cloud/
 │   │   ├── update_analyse.py # 更新分析ID接口
 │   │   └── upload_samples.py # 样本上传接口
 │   └── tasks/              # 后台任务
-│       └── video_processor.py # 视频流处理器
+│       └── video_processor.py # 视频流处理器（DeepStream 管道 + OpenCV 回退）
 ├── models/                 # 模型文件目录
 │   ├── model_mengdong_raa_adjusted.pt
 │   ├── model_mengdong_small_SRL.pt
 │   ├── model_mengdong_tower.pt
 │   └── model_mengdong_scene_album.pt
-└── output/                 # 输出视频目录
+├── output/                 # 输出视频目录
+└── deepstream_yolo/        # 构建时从项目根目录复制（build.sh 自动处理）
+    ├── nvdsinfer_custom_impl_Yolo/   # 自定义推理插件源码
+    │   ├── Makefile
+    │   ├── nvdsparsebbox_Yolo.cpp    # NvDsInferParseYolo 解析函数
+    │   ├── nvdsinfer_yolo_engine.cpp # NvDsInferYoloCudaEngineGet
+    │   ├── yolo.cpp/h                # YOLO 网络构建
+    │   └── libnvdsinfer_custom_impl_Yolo.so  # 编译产物
+    └── utils/
+        └── export_yoloV8.py          # YOLOv8 → ONNX 导出脚本
+```
+
+## 8. DeepStream-Yolo 推理流程
+
+```
+服务启动
+  │
+  ├─ 1. export_yoloV8.py 导出 .pt → .onnx
+  │     （添加 DeepStreamOutput 层）
+  │
+  ├─ 2. 生成 config_infer_<algCode>.txt
+  │     （引用 libnvdsinfer_custom_impl_Yolo.so）
+  │
+  ├─ 3. 生成 labels_<algCode>.txt
+  │
+  └─ 4. 加载 ultralytics 模型（图片推理后端）
+
+视频流推理（DeepStream 管道）
+  │
+  ├─ uridecodebin → nvstreammux → nvinfer → nvosd → appsink
+  │                                  │
+  │                    ┌──────────────┘
+  │                    │
+  │                 config_infer_<algCode>.txt
+  │                    │
+  │                 onnx-file → TensorRT engine
+  │                 parse-bbox-func-name=NvDsInferParseYolo
+  │                 custom-lib-path=libnvdsinfer_custom_impl_Yolo.so
+  │                 engine-create-func-name=NvDsInferYoloCudaEngineGet
+  │                    │
+  │                 NvDsObjectMeta → 检测结果上报
+  │
+  └─ 输出 MP4 标注视频
+
+图片推理（ultralytics 后端）
+  │
+  └─ YOLO.predict(image) → 检测结果 JSON
 ```

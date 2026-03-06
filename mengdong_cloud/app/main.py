@@ -1,4 +1,11 @@
 # 蒙东云端AI分析平台 - 主入口
+#
+# 集成 DeepStream-Yolo 推理管道：
+# 1. 启动时使用 export_yoloV8.py 将 .pt 模型导出为 ONNX
+# 2. 生成 DeepStream 推理配置文件（config_infer_*.txt, labels_*.txt）
+# 3. 视频流分析使用 DeepStream GStreamer 管道（nvinfer + NvDsInferParseYolo）
+# 4. 图片分析使用 ultralytics 后端
+# 5. 当 DeepStream 不可用时，视频分析自动回退到 OpenCV + ultralytics
 
 import logging
 import os
@@ -12,6 +19,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.config import (
+    DEEPSTREAM_CONFIG_DIR,
     KEEPALIVE_INTERVAL,
     OUTPUT_DIR,
     PLATFORM_HOST,
@@ -55,13 +63,14 @@ def _keepalive_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动时加载模型
-    logger.info("正在加载 YOLOv8 模型...")
+    # 确保配置目录和输出目录存在
+    os.makedirs(DEEPSTREAM_CONFIG_DIR, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    # 启动时加载模型（含 ONNX 导出和 DeepStream 配置生成）
+    logger.info("正在加载 YOLOv8 模型（含 DeepStream-Yolo ONNX 导出）...")
     model_manager.load_all_models()
     logger.info("模型加载完成")
-
-    # 确保输出目录存在
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     # 启动保活线程
     _keepalive_stop.clear()
@@ -80,8 +89,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="蒙东云端AI分析平台",
-    description="基于 YOLOv8 的云端AI分析服务，支持视频流分析和图片分析",
-    version="1.0.0",
+    description=(
+        "基于 DeepStream-Yolo + YOLOv8 的云端AI分析服务。\n\n"
+        "视频流分析使用 NVIDIA DeepStream SDK 推理管道 "
+        "(ONNX → TensorRT → nvinfer + NvDsInferParseYolo)，"
+        "图片分析使用 ultralytics 后端。"
+    ),
+    version="2.0.0",
     lifespan=lifespan,
 )
 
@@ -106,6 +120,7 @@ async def health_check():
         "status": "ok",
         "models_loaded": model_manager.is_loaded,
         "loaded_count": len(model_manager.loaded_models),
+        "deepstream_configs": len(model_manager.ds_configs),
     }
 
 

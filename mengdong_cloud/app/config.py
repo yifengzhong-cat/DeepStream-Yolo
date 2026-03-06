@@ -27,6 +27,39 @@ CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.5"))
 # 推理设备
 DEVICE = os.getenv("DEVICE", "0")  # GPU设备号，"cpu" 表示使用CPU
 
+# ==================== DeepStream 配置 ====================
+
+# DeepStream-Yolo 项目根目录（容器内路径）
+DEEPSTREAM_YOLO_DIR = os.getenv("DEEPSTREAM_YOLO_DIR", "/app/deepstream_yolo")
+
+# DeepStream 生成的配置文件目录
+DEEPSTREAM_CONFIG_DIR = os.getenv("DEEPSTREAM_CONFIG_DIR", "/app/ds_configs")
+
+# DeepStream 自定义推理库路径
+DEEPSTREAM_CUSTOM_LIB = os.path.join(
+    DEEPSTREAM_YOLO_DIR, "nvdsinfer_custom_impl_Yolo", "libnvdsinfer_custom_impl_Yolo.so"
+)
+
+# DeepStream 推理网络模式: 0=FP32, 1=INT8, 2=FP16
+DEEPSTREAM_NETWORK_MODE = int(os.getenv("DEEPSTREAM_NETWORK_MODE", "0"))
+
+# DeepStream NMS 参数
+DEEPSTREAM_NMS_IOU_THRESHOLD = float(os.getenv("DEEPSTREAM_NMS_IOU_THRESHOLD", "0.45"))
+DEEPSTREAM_PRE_CLUSTER_THRESHOLD = float(
+    os.getenv("DEEPSTREAM_PRE_CLUSTER_THRESHOLD", "0.25")
+)
+DEEPSTREAM_TOPK = int(os.getenv("DEEPSTREAM_TOPK", "300"))
+
+# ONNX 推理输入尺寸
+DEEPSTREAM_INFER_SIZE = int(os.getenv("DEEPSTREAM_INFER_SIZE", "640"))
+
+# DeepStream 视频流处理参数
+DEEPSTREAM_STREAMMUX_WIDTH = int(os.getenv("DEEPSTREAM_STREAMMUX_WIDTH", "1920"))
+DEEPSTREAM_STREAMMUX_HEIGHT = int(os.getenv("DEEPSTREAM_STREAMMUX_HEIGHT", "1080"))
+DEEPSTREAM_STREAMMUX_BATCH_TIMEOUT = int(
+    os.getenv("DEEPSTREAM_STREAMMUX_BATCH_TIMEOUT", "40000")
+)
+
 # 模型配置：模型文件名 -> (algCode, 描述, 标签列表)
 MODEL_CONFIGS = {
     "model_mengdong_raa_adjusted.pt": {
