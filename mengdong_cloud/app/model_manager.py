@@ -192,7 +192,7 @@ class ModelManager:
         )
 
     @property
-    def loaded_models(self) -> Dict[str, object]:
+    def loaded_models(self) -> Dict[str, dict]:
         """返回已加载的 DeepStream 配置（兼容旧接口）"""
         return self._ds_configs
 
