@@ -40,7 +40,8 @@ DEEPSTREAM_CUSTOM_LIB = os.path.join(
     DEEPSTREAM_YOLO_DIR, "nvdsinfer_custom_impl_Yolo", "libnvdsinfer_custom_impl_Yolo.so"
 )
 
-# DeepStream 推理网络模式: 0=FP32, 1=INT8, 2=FP16
+# DeepStream 推理网络模式 (NvInferNetworkMode):
+# 0=FP32, 1=INT8 (需要 int8-calib-file), 2=FP16
 DEEPSTREAM_NETWORK_MODE = int(os.getenv("DEEPSTREAM_NETWORK_MODE", "0"))
 
 # DeepStream NMS 参数

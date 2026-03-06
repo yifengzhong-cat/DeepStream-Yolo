@@ -83,6 +83,8 @@ class ModelManager:
                 onnx_file,
             )
             try:
+                # --dynamic: 启用动态 batch size，DeepStream 可按需调整
+                # --simplify: 优化 ONNX 计算图，提升 TensorRT 转换效率
                 cmd = [
                     sys.executable,
                     export_script,
