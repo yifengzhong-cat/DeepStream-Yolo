@@ -1,0 +1,23 @@
+# 模型文件（太大不提交到git）
+models/*.pt
+models/*.onnx
+models/*.engine
+
+# 输出目录
+output/
+
+# Docker 镜像导出文件
+*.tar
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 虚拟环境
+venv/
+.venv/
+env/
