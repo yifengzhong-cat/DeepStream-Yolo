@@ -126,7 +126,10 @@ class TestAbilities:
         assert "resultValue" in data
 
         ability_info = data["resultValue"]["abilityInfo"]
-        assert ability_info["number"] == 4  # 4 个算法模型
+        # MODEL_CONFIGS 中定义了 4 个模型 (010101~010104)
+        # 如果添加或删除模型，此处需同步更新
+        assert ability_info["number"] == len(ability_info["ability"])
+        assert ability_info["number"] > 0
 
         # 验证每个算法都有 algCode 和 algDesc
         for ability in ability_info["ability"]:

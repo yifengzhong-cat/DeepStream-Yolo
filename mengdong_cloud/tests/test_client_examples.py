@@ -42,18 +42,22 @@ TEST_VIDEO_FILE = "file:///app/videos/test.mp4"
 # 测试用图片路径（本地路径，用于图片分析测试）
 TEST_IMAGE_PATH = None  # 设置为 None 时自动生成测试图片
 
+# 输出格式常量
+_DIVIDER_WIDTH = 60
+_MAX_DISPLAY_LENGTH = 2000
+
 
 def _print_result(title: str, resp: requests.Response):
     """格式化打印请求结果"""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * _DIVIDER_WIDTH}")
     print(f"  {title}")
-    print(f"{'='*60}")
+    print(f"{'=' * _DIVIDER_WIDTH}")
     print(f"  状态码: {resp.status_code}")
     data = resp.json()
     # 截断过长的 Base64 数据用于显示
     display_data = json.dumps(data, ensure_ascii=False, indent=2)
-    if len(display_data) > 2000:
-        display_data = display_data[:2000] + "\n  ... (已截断)"
+    if len(display_data) > _MAX_DISPLAY_LENGTH:
+        display_data = display_data[:_MAX_DISPLAY_LENGTH] + "\n  ... (已截断)"
     print(f"  响应: {display_data}")
 
 
@@ -239,9 +243,9 @@ def example_video_stream_lifecycle():
     analyse_id = f"stream-example-{int(time.time())}"
 
     # --- 4a: 启动 RTSP 视频流分析 ---
-    print("\n" + "=" * 60)
+    print("\n" + "=" * _DIVIDER_WIDTH)
     print("  步骤 1/4: 启动视频流分析任务")
-    print("=" * 60)
+    print("=" * _DIVIDER_WIDTH)
     start_payload = {
         "algCode": "010101",  # 人员穿戴检测
         "interval": 30,  # 每30秒上报一次结果
@@ -293,9 +297,9 @@ def example_video_stream_lifecycle():
     _print_result("服务状态检查", health)
 
     # --- 4c: 停止视频流分析 ---
-    print("\n" + "=" * 60)
+    print("\n" + "=" * _DIVIDER_WIDTH)
     print("  步骤 2/4: 停止视频流分析任务")
-    print("=" * 60)
+    print("=" * _DIVIDER_WIDTH)
     stop_payload = {
         "algCode": "010101",
         "command": 0,  # 0=停止
@@ -331,9 +335,9 @@ def example_video_stream_lifecycle():
     _print_result(f"停止视频流: {analyse_id}", resp)
 
     # --- 4d: 通过任务控制接口恢复任务 ---
-    print("\n" + "=" * 60)
+    print("\n" + "=" * _DIVIDER_WIDTH)
     print("  步骤 3/4: 通过控制接口管理任务")
-    print("=" * 60)
+    print("=" * _DIVIDER_WIDTH)
     """
     cURL 等效命令（恢复任务）:
         curl -X POST http://127.0.0.1:22266/v1/service/controlTask \\
@@ -347,9 +351,9 @@ def example_video_stream_lifecycle():
     _print_result(f"恢复任务: {analyse_id}", resp)
 
     # --- 4e: 删除视频流分析任务 ---
-    print("\n" + "=" * 60)
+    print("\n" + "=" * _DIVIDER_WIDTH)
     print("  步骤 4/4: 删除视频流分析任务")
-    print("=" * 60)
+    print("=" * _DIVIDER_WIDTH)
     delete_payload = {
         "algCode": "010101",
         "command": 2,  # 2=删除
@@ -487,6 +491,8 @@ def example_update_analyse_id():
 
 
 def main():
+    global BASE_URL, TEST_RTSP_URL
+
     parser = argparse.ArgumentParser(
         description="蒙东云端AI分析平台 — API 接口调用示例"
     )
@@ -505,17 +511,16 @@ def main():
 
     args = parser.parse_args()
 
-    global BASE_URL, TEST_RTSP_URL
     BASE_URL = args.base_url
     if args.rtsp_url:
         TEST_RTSP_URL = args.rtsp_url
 
     run_all = not (args.image or args.video or args.stream)
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * _DIVIDER_WIDTH}")
     print(f"  蒙东云端AI分析平台 — API 接口调用示例")
     print(f"  服务地址: {BASE_URL}")
-    print(f"{'#'*60}")
+    print(f"{'#' * _DIVIDER_WIDTH}")
 
     try:
         if run_all:
@@ -541,9 +546,9 @@ def main():
         print("  启动方式: cd mengdong_cloud && python -m uvicorn app.main:app --port 22266")
         sys.exit(1)
 
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * _DIVIDER_WIDTH}")
     print("  所有示例执行完成")
-    print(f"{'#'*60}\n")
+    print(f"{'#' * _DIVIDER_WIDTH}\n")
 
 
 if __name__ == "__main__":
