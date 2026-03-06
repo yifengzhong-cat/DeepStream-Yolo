@@ -99,6 +99,16 @@ trtexec --onnx=your_model.onnx \
 > 如果你还没有 `calib.table`，建议优先使用方式 A（DeepStream 自动完成校准并生成 INT8 engine）。
 > 生成成功后，确认 `model-engine-file` 指向的 engine 文件存在。
 
+### 2.5 不走 Python，直接用 C++ 可以吗？
+
+可以。`deepstream-app` 本身就是 C/C++ 应用，完成上述 ONNX/INT8 engine 准备后可直接运行：
+
+```bash
+deepstream-app -c "${REPO_ROOT}/deepstream_app_config.txt"
+```
+
+> 本文档第 3 章使用 Python（FastAPI）只是为了对外提供 HTTP 接口；底层推理仍是 DeepStream（C/C++ + TensorRT）。
+
 ---
 
 ## 3. 启动 mengdong_cloud 服务
@@ -202,3 +212,6 @@ ffmpeg -rtsp_transport tcp -i rtsp://127.0.0.1:8554/tower-001 \
 
 3. **服务返回成功但没有真实推理？**  
    若运行环境找不到 `deepstream-app`，服务会进入 mock 状态。请确认 DeepStream 安装与 `deepstream-app` 可执行。
+
+4. **为什么偏要用 Python，C++ 不行吗？**  
+   可以不用 Python。模型导出阶段常用 Python 工具（`pt -> onnx`），但推理执行可直接使用 `deepstream-app`（C/C++）。只有在你需要 REST 接口时，才需要运行 `mengdong_cloud` 的 Python 服务层。
