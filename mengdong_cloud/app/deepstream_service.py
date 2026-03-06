@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import os
 import signal
 import shutil
@@ -14,6 +15,8 @@ from threading import Lock
 from typing import Any
 
 from .model_catalog import MODEL_ABILITIES, get_ability_or_none
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -150,7 +153,11 @@ class DeepStreamTaskService:
 
         image_name = f"{analyse_id}.jpg"
         image_path = self.runtime_dir / image_name
-        image_path.write_bytes(image_bytes)
+        try:
+            self.runtime_dir.mkdir(parents=True, exist_ok=True)
+            image_path.write_bytes(image_bytes)
+        except OSError as exc:
+            logger.warning("failed to write image file to disk for analysis_id=%s: %s", analyse_id, exc)
 
         analyse_time = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
         result_value = {

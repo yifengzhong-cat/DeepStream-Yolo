@@ -1,6 +1,5 @@
 import base64
 
-
 def test_abilities_contains_four_algorithms(client):
     response = client.post("/v1/service/abilities", json={})
     assert response.status_code == 200
@@ -48,3 +47,21 @@ def test_keep_alive_returns_dev_id(client):
     body = response.json()
     assert body["resultCode"] == "200"
     assert "devId" in body["resultValue"]
+
+
+def test_image_task_still_succeeds_when_runtime_write_fails(client, monkeypatch):
+    from app import deepstream_service
+
+    def _raise_oserror(*args, **kwargs):
+        raise OSError("simulated write failure")
+
+    monkeypatch.setattr(deepstream_service.Path, "write_bytes", _raise_oserror)
+    payload = {
+        "analyseId": "img-2",
+        "algCode": "101003",
+        "imageData": base64.b64encode(b"fake-jpg").decode("utf-8"),
+    }
+    response = client.post("/v1/service/imageTask", json=payload)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["resultCode"] == "200"
