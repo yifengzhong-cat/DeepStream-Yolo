@@ -142,7 +142,7 @@ def get_sensitivity_from_rule(rule) -> float:
             try:
                 sensitivity = int(param.value)
                 # 灵敏度 1-5 映射到置信度 0.8-0.2
-                conf = max(0.1, 1.0 - sensitivity * 0.15)
+                conf = max(0.1, 0.95 - sensitivity * 0.15)
                 return conf
             except (ValueError, TypeError):
                 pass

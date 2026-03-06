@@ -237,10 +237,16 @@ class VideoTaskManager:
                 return False
             task.stop()
             # 使用新的 analyse_id 重新创建任务
+            # 仅替换 URL 中查询参数部分的 analyseID 值
+            new_url = task.video_url
+            if f"analyseID={old_id}" in new_url:
+                new_url = new_url.replace(f"analyseID={old_id}", f"analyseID={new_id}")
+            elif f"analyseId={old_id}" in new_url:
+                new_url = new_url.replace(f"analyseId={old_id}", f"analyseId={new_id}")
             new_task = VideoTask(
                 analyse_id=new_id,
                 alg_code=task.alg_code,
-                video_url=task.video_url.replace(old_id, new_id),
+                video_url=new_url,
                 dev_code=task.dev_code,
                 interval=task.interval,
                 format_type=task.format_type,

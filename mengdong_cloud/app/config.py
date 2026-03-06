@@ -6,6 +6,9 @@ import os
 SERVICE_HOST = os.getenv("SERVICE_HOST", "0.0.0.0")
 SERVICE_PORT = int(os.getenv("SERVICE_PORT", "22266"))
 
+# 对外公开访问地址（用于生成可访问的URL）
+PUBLIC_HOST = os.getenv("PUBLIC_HOST", "127.0.0.1")
+
 # 上报平台地址（统一视频平台）
 PLATFORM_HOST = os.getenv("PLATFORM_HOST", "http://127.0.0.1:8080")
 

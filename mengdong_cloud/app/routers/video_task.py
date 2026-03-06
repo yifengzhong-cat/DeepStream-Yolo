@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter
 
-from app.config import SERVICE_HOST, SERVICE_PORT
+from app.config import PUBLIC_HOST, SERVICE_PORT
 from app.schemas import VideoTaskRequest, VideoTaskResponse, VideoTaskResultItem
 from app.tasks.video_processor import video_task_manager
 
@@ -30,7 +30,7 @@ async def video_task(req: VideoTaskRequest):
                 rule=req.rule,
             )
             osd_url = (
-                f"http://{SERVICE_HOST}:{SERVICE_PORT}/output/{vi.analyseId}.mp4"
+                f"http://{PUBLIC_HOST}:{SERVICE_PORT}/output/{vi.analyseId}.mp4"
             )
             result_items.append(
                 VideoTaskResultItem(

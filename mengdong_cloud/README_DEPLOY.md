@@ -68,6 +68,7 @@ docker-compose up -d
 |---------|-------|------|
 | `SERVICE_HOST` | `0.0.0.0` | 服务监听地址 |
 | `SERVICE_PORT` | `22266` | 服务监听端口 |
+| `PUBLIC_HOST` | `127.0.0.1` | 对外公开访问地址（用于生成结果视频URL） |
 | `PLATFORM_HOST` | `http://127.0.0.1:8080` | 统一视频平台地址（用于结果上报和保活） |
 | `KEEPALIVE_INTERVAL` | `30` | 保活心跳间隔（秒） |
 | `DEVICE` | `0` | GPU 设备号（`0` 表示第一块 GPU，`cpu` 表示使用 CPU） |

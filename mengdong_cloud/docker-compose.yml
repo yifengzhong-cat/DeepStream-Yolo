@@ -17,6 +17,7 @@ services:
       - SERVICE_HOST=0.0.0.0
       - SERVICE_PORT=22266
       - PLATFORM_HOST=http://host.docker.internal:8080
+      - PUBLIC_HOST=127.0.0.1
       - KEEPALIVE_INTERVAL=30
       - DEVICE=0
       - CONFIDENCE_THRESHOLD=0.5
@@ -27,8 +28,3 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; r=requests.get('http://localhost:22266/health'); exit(0 if r.status_code==200 else 1)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
