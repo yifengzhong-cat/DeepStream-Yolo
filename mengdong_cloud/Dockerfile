@@ -1,6 +1,7 @@
 # ============================================================
 # 蒙东云端AI分析平台 Docker镜像
 # 基于 NVIDIA DeepStream 镜像，使用 DeepStream-Yolo 推理管道
+# 所有推理（视频流 + 图片）均通过 DeepStream 管道完成
 # ============================================================
 
 FROM nvcr.io/nvidia/deepstream:7.1-triton-multiarch

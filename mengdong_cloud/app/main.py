@@ -1,11 +1,11 @@
 # 蒙东云端AI分析平台 - 主入口
 #
-# 集成 DeepStream-Yolo 推理管道：
+# 基于 DeepStream-Yolo 推理管道，所有推理均通过 DeepStream 完成：
 # 1. 启动时使用 export_yoloV8.py 将 .pt 模型导出为 ONNX
 # 2. 生成 DeepStream 推理配置文件（config_infer_*.txt, labels_*.txt）
 # 3. 视频流分析使用 DeepStream GStreamer 管道（nvinfer + NvDsInferParseYolo）
-# 4. 图片分析使用 ultralytics 后端
-# 5. 当 DeepStream 不可用时，视频分析自动回退到 OpenCV + ultralytics
+# 4. 图片分析使用 DeepStream 单帧推理管道（ds_image_infer）
+# 5. 不依赖 ultralytics 运行时库
 
 import logging
 import os
@@ -91,11 +91,11 @@ app = FastAPI(
     title="蒙东云端AI分析平台",
     description=(
         "基于 DeepStream-Yolo + YOLOv8 的云端AI分析服务。\n\n"
-        "视频流分析使用 NVIDIA DeepStream SDK 推理管道 "
+        "所有推理均通过 NVIDIA DeepStream SDK 推理管道完成 "
         "(ONNX → TensorRT → nvinfer + NvDsInferParseYolo)，"
-        "图片分析使用 ultralytics 后端。"
+        "视频流和图片分析共用同一套 DeepStream 配置，无需 ultralytics 运行时依赖。"
     ),
-    version="2.0.0",
+    version="3.0.0",
     lifespan=lifespan,
 )
 

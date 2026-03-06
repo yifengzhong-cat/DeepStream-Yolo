@@ -1,19 +1,36 @@
 # 推理辅助函数
+#
+# 提供统一的 Detection 数据结构和图片处理工具。
+# Detection 对象由 DeepStream 推理管道（NvDsObjectMeta）生成。
 
 import base64
-import io
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Tuple
 
 import cv2
 import numpy as np
-from PIL import Image
 
 from app.config import ALGCODE_TO_MODEL, MODEL_CONFIGS
 from app.schemas import ResultDetail, ResultItem
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class Detection:
+    """通用检测结果
+
+    统一的检测框格式，由 DeepStream NvDsObjectMeta 转换而来。
+    """
+
+    class_id: int
+    confidence: float
+    x1: int
+    y1: int
+    x2: int
+    y2: int
 
 
 def decode_base64_image(image_data: str) -> np.ndarray:
@@ -32,8 +49,14 @@ def encode_image_to_base64(img: np.ndarray, fmt: str = ".jpg") -> str:
     return base64.b64encode(buffer).decode("utf-8")
 
 
-def draw_detections(img: np.ndarray, results, alg_code: str) -> np.ndarray:
-    """在图片上绘制检测框和标签，返回标注后的图片"""
+def draw_detections(img: np.ndarray, detections: List[Detection], alg_code: str) -> np.ndarray:
+    """在图片上绘制检测框和标签，返回标注后的图片
+
+    Args:
+        img: BGR numpy 数组
+        detections: Detection 对象列表
+        alg_code: 算法编码
+    """
     osd_img = img.copy()
     model_file = ALGCODE_TO_MODEL.get(alg_code)
     if model_file is None:
@@ -41,43 +64,40 @@ def draw_detections(img: np.ndarray, results, alg_code: str) -> np.ndarray:
 
     labels_cn = MODEL_CONFIGS[model_file].get("labels_cn", {})
 
-    for result in results:
-        boxes = result.boxes
-        if boxes is None:
-            continue
-        for box in boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-            conf = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            label = labels_cn.get(cls_id, str(cls_id))
+    for det in detections:
+        label = labels_cn.get(det.class_id, str(det.class_id))
 
-            # 绘制矩形框
-            color = (0, 255, 0)
-            cv2.rectangle(osd_img, (x1, y1), (x2, y2), color, 2)
+        # 绘制矩形框
+        color = (0, 255, 0)
+        cv2.rectangle(osd_img, (det.x1, det.y1), (det.x2, det.y2), color, 2)
 
-            # 绘制标签
-            text = f"{label} {conf:.1%}"
-            font_scale = 0.6
-            thickness = 1
-            (tw, th), _ = cv2.getTextSize(
-                text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
-            )
-            cv2.rectangle(osd_img, (x1, y1 - th - 6), (x1 + tw, y1), color, -1)
-            cv2.putText(
-                osd_img,
-                text,
-                (x1, y1 - 4),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                font_scale,
-                (0, 0, 0),
-                thickness,
-            )
+        # 绘制标签
+        text = f"{label} {det.confidence:.1%}"
+        font_scale = 0.6
+        thickness = 1
+        (tw, th), _ = cv2.getTextSize(
+            text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
+        )
+        cv2.rectangle(osd_img, (det.x1, det.y1 - th - 6), (det.x1 + tw, det.y1), color, -1)
+        cv2.putText(
+            osd_img,
+            text,
+            (det.x1, det.y1 - 4),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (0, 0, 0),
+            thickness,
+        )
 
     return osd_img
 
 
-def parse_results(results, alg_code: str) -> Tuple[List[str], List[ResultDetail]]:
-    """解析 YOLO 推理结果为接口返回格式
+def parse_results(detections: List[Detection], alg_code: str) -> Tuple[List[str], List[ResultDetail]]:
+    """解析检测结果为接口返回格式
+
+    Args:
+        detections: Detection 对象列表
+        alg_code: 算法编码
 
     Returns:
         (analyseResults, resultDetail)
@@ -92,29 +112,21 @@ def parse_results(results, alg_code: str) -> Tuple[List[str], List[ResultDetail]
     class_items = {}
     analyse_results_set = set()
 
-    for result in results:
-        boxes = result.boxes
-        if boxes is None:
-            continue
-        for box in boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-            conf = float(box.conf[0])
-            cls_id = int(box.cls[0])
-            label = labels_cn.get(cls_id, str(cls_id))
+    for det in detections:
+        label = labels_cn.get(det.class_id, str(det.class_id))
+        analyse_results_set.add(label)
 
-            analyse_results_set.add(label)
-
-            if cls_id not in class_items:
-                class_items[cls_id] = []
-            class_items[cls_id].append(
-                ResultItem(
-                    score=round(conf * 100, 1),
-                    leftTopX=x1,
-                    leftTopY=y1,
-                    rightBottomX=x2,
-                    rightBottomY=y2,
-                )
+        if det.class_id not in class_items:
+            class_items[det.class_id] = []
+        class_items[det.class_id].append(
+            ResultItem(
+                score=round(det.confidence * 100, 1),
+                leftTopX=det.x1,
+                leftTopY=det.y1,
+                rightBottomX=det.x2,
+                rightBottomY=det.y2,
             )
+        )
 
     analyse_results = list(analyse_results_set)
 

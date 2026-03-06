@@ -21,7 +21,7 @@ router = APIRouter()
 
 @router.post("/v1/service/imageTask", response_model=ImageTaskResponse)
 async def image_task(req: ImageTaskRequest):
-    """图片分析任务：对单张图片进行推理分析"""
+    """图片分析任务：对单张图片进行推理分析（使用 DeepStream 推理管道）"""
     try:
         # 解码图片
         img = decode_base64_image(req.imageData)
@@ -33,9 +33,9 @@ async def image_task(req: ImageTaskRequest):
             resultHint="图片数据解码失败",
         )
 
-    # 检查模型是否存在
-    model = model_manager.get_model(req.algCode)
-    if model is None:
+    # 检查 DeepStream 配置是否存在
+    ds_cfg = model_manager.get_ds_config(req.algCode)
+    if ds_cfg is None:
         return ImageTaskResponse(
             resultCode="404",
             resultValue=None,
@@ -46,11 +46,11 @@ async def image_task(req: ImageTaskRequest):
     conf = get_sensitivity_from_rule(req.rule)
 
     try:
-        # 执行推理
+        # 执行推理（DeepStream 管道）
         kwargs = {}
         if conf is not None:
             kwargs["conf"] = conf
-        results = model_manager.predict(req.algCode, img, **kwargs)
+        detections = model_manager.predict(req.algCode, img, **kwargs)
     except Exception:
         logger.exception("推理失败")
         return ImageTaskResponse(
@@ -60,10 +60,10 @@ async def image_task(req: ImageTaskRequest):
         )
 
     # 解析结果
-    analyse_results, result_detail = parse_results(results, req.algCode)
+    analyse_results, result_detail = parse_results(detections, req.algCode)
 
     # 绘制检测框
-    osd_img = draw_detections(img, results, req.algCode)
+    osd_img = draw_detections(img, detections, req.algCode)
 
     # 编码图片
     raw_b64 = encode_image_to_base64(img)

@@ -1,7 +1,6 @@
 fastapi==0.115.0
 uvicorn[standard]==0.24.0
 pydantic==2.5.2
-ultralytics==8.1.0
 opencv-python-headless==4.9.0.80
 numpy>=1.24.0
 requests==2.31.0
@@ -12,3 +11,6 @@ apscheduler==3.10.4
 onnx>=1.17.0
 # DeepStream Python 绑定 (pyds) 和 GStreamer Python 绑定 (PyGObject)
 # 已包含在 NVIDIA DeepStream Docker 基础镜像中，无需额外安装
+#
+# 注意：ultralytics 不再是运行时依赖。推理完全通过 DeepStream 管道完成。
+# ONNX 导出（export_yoloV8.py）仍需 ultralytics，但可提前在开发环境中完成。

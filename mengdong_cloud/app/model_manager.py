@@ -1,62 +1,71 @@
 # YOLOv8 模型管理器
 #
-# 支持两种推理后端：
-# 1. DeepStream (TensorRT)：使用 DeepStream-Yolo 项目的 export_yoloV8.py 将 .pt
-#    导出为 .onnx，再通过 DeepStream 的 GIE 引擎自动转为 TensorRT engine。
-#    适合视频流分析场景，性能更高。
-# 2. ultralytics（回退）：直接使用 ultralytics YOLO 加载 .pt 模型进行推理。
-#    适合图片推理场景或 DeepStream 不可用的环境。
+# 使用 DeepStream-Yolo 推理管道作为主要推理后端：
+# 1. 视频流：使用 DeepStream GStreamer 管道 (nvinfer + NvDsInferParseYolo)
+# 2. 图片：使用 DeepStream 单帧推理管道 (ds_image_infer)
+#
+# 启动时通过 export_yoloV8.py 将 .pt 模型导出为 ONNX，
+# DeepStream 的 nvinfer 自动将 ONNX 转为 TensorRT engine。
+#
+# 注意：ONNX 导出脚本 (export_yoloV8.py) 需要 ultralytics 库，
+# 但运行时推理不需要。可提前导出 ONNX 模型后部署。
 
 import logging
 import os
 import subprocess
 import sys
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from app.config import (
     ALGCODE_TO_MODEL,
-    CONFIDENCE_THRESHOLD,
     DEEPSTREAM_INFER_SIZE,
     DEEPSTREAM_YOLO_DIR,
-    DEVICE,
     MODEL_CONFIGS,
     MODEL_DIR,
 )
+from app.inference import Detection
 
 logger = logging.getLogger(__name__)
 
 
 class ModelManager:
-    """管理多个 YOLOv8 模型的加载和推理"""
+    """管理 YOLOv8 模型的加载和推理（基于 DeepStream-Yolo）"""
 
     def __init__(self):
-        self._models: Dict[str, object] = {}
         self._loaded = False
         self._ds_configs: Dict[str, dict] = {}
-        self._deepstream_available = False
+        self._ds_image_available = False
 
     def load_all_models(self):
         """加载所有配置的模型
 
         流程：
-        1. 尝试将 .pt 模型通过 DeepStream-Yolo 的 export_yoloV8.py 导出为 .onnx
+        1. 尝试将 .pt 模型通过 export_yoloV8.py 导出为 ONNX（需要 ultralytics）
         2. 生成 DeepStream 推理配置文件
-        3. 加载 ultralytics YOLO 模型作为图片推理后端
+        3. 检查 DeepStream 图片推理是否可用
         """
-        # 步骤1：尝试导出 ONNX（使用 DeepStream-Yolo 的 export 脚本）
+        # 步骤1：尝试导出 ONNX
         self._export_onnx_models()
 
         # 步骤2：生成 DeepStream 配置文件
         self._generate_ds_configs()
 
-        # 步骤3：加载 ultralytics 模型（用于图片推理）
-        self._load_ultralytics_models()
+        # 步骤3：检查 DeepStream 图片推理可用性
+        self._check_ds_image_infer()
 
         self._loaded = True
-        logger.info("模型加载完成，共加载 %d 个模型", len(self._models))
+        logger.info(
+            "模型加载完成，DeepStream 配置 %d 个，图片推理: %s",
+            len(self._ds_configs),
+            "DeepStream" if self._ds_image_available else "不可用",
+        )
 
     def _export_onnx_models(self):
-        """使用 DeepStream-Yolo 的 export_yoloV8.py 将 .pt 模型导出为 .onnx"""
+        """使用 DeepStream-Yolo 的 export_yoloV8.py 将 .pt 模型导出为 .onnx
+
+        注意：此脚本内部使用 ultralytics 库加载 .pt 模型，
+        仅在 ONNX 文件不存在时才需要运行。如果 ONNX 已导出则跳过。
+        """
         export_script = os.path.join(DEEPSTREAM_YOLO_DIR, "utils", "export_yoloV8.py")
         if not os.path.exists(export_script):
             logger.warning(
@@ -123,34 +132,22 @@ class ModelManager:
         except Exception:
             logger.exception("DeepStream 配置文件生成失败")
 
-    def _load_ultralytics_models(self):
-        """加载 ultralytics YOLO 模型（用于图片推理后端）"""
+    def _check_ds_image_infer(self):
+        """检查 DeepStream 图片推理是否可用"""
         try:
-            from ultralytics import YOLO
-        except ImportError:
-            logger.error("ultralytics 库未安装，请执行: pip install ultralytics")
-            raise
+            from app import ds_image_infer
 
-        for model_file, cfg in MODEL_CONFIGS.items():
-            model_path = os.path.join(MODEL_DIR, model_file)
-            if os.path.exists(model_path):
-                try:
-                    model = YOLO(model_path)
-                    self._models[cfg["algCode"]] = model
-                    logger.info(
-                        "模型加载成功: %s (algCode=%s, desc=%s)",
-                        model_file,
-                        cfg["algCode"],
-                        cfg["algDesc"],
-                    )
-                except Exception:
-                    logger.exception("模型加载失败: %s", model_file)
+            self._ds_image_available = ds_image_infer.is_available()
+            if self._ds_image_available:
+                logger.info("DeepStream 图片推理可用")
             else:
-                logger.warning("模型文件不存在: %s", model_path)
-
-    def get_model(self, alg_code: str) -> Optional[object]:
-        """根据算法编码获取 ultralytics 模型"""
-        return self._models.get(alg_code)
+                logger.warning(
+                    "DeepStream 图片推理不可用（pyds/Gst 未安装），"
+                    "图片分析接口将不可用"
+                )
+        except ImportError:
+            logger.warning("ds_image_infer 模块导入失败")
+            self._ds_image_available = False
 
     def get_ds_config(self, alg_code: str) -> Optional[dict]:
         """根据算法编码获取 DeepStream 配置"""
@@ -167,32 +164,37 @@ class ModelManager:
             return onnx_path
         return None
 
-    def predict(self, alg_code: str, source, conf: float = None, **kwargs):
-        """使用 ultralytics 后端执行推理（图片分析）
+    def predict(self, alg_code: str, source, conf: float = None, **kwargs) -> List[Detection]:
+        """对图片执行推理，返回检测结果列表
+
+        使用 DeepStream 管道进行推理（与视频流推理共用同一套配置）。
 
         Args:
             alg_code: 算法编码
-            source: 图片路径、numpy数组或URL
-            conf: 置信度阈值
-            **kwargs: 其他 YOLO predict 参数
+            source: BGR numpy 数组
+            conf: 置信度阈值（由 DeepStream 配置中的 pre-cluster-threshold 控制）
 
         Returns:
-            YOLO 推理结果列表
+            Detection 对象列表
         """
-        model = self.get_model(alg_code)
-        if model is None:
-            raise ValueError(f"未找到算法编码对应的模型: {alg_code}")
+        if self._ds_image_available:
+            ds_cfg = self.get_ds_config(alg_code)
+            if ds_cfg is not None:
+                from app import ds_image_infer
 
-        if conf is None:
-            conf = CONFIDENCE_THRESHOLD
+                return ds_image_infer.infer_image(
+                    source, ds_cfg["infer_config_path"]
+                )
 
-        device = DEVICE
-        results = model.predict(source=source, conf=conf, device=device, **kwargs)
-        return results
+        raise RuntimeError(
+            f"无可用推理后端: algCode={alg_code}。"
+            "请确保 DeepStream (pyds/Gst) 已安装且 ONNX 模型已导出。"
+        )
 
     @property
     def loaded_models(self) -> Dict[str, object]:
-        return self._models
+        """返回已加载的 DeepStream 配置（兼容旧接口）"""
+        return self._ds_configs
 
     @property
     def ds_configs(self) -> Dict[str, dict]:

@@ -12,15 +12,19 @@
                     │         (FastAPI REST API)            │
                     ├─────────────┬───────────────────────┤
                     │  图片分析    │     视频流分析            │
-                    │ (ultralytics)│  (DeepStream 管道)      │
+                    │(DeepStream  │  (DeepStream 管道)      │
+                    │ 单帧管道)   │                         │
                     │             │                         │
-                    │ .pt → YOLO  │ .pt → ONNX → TensorRT  │
-                    │  predict()  │  nvinfer (GIE)          │
-                    │             │  NvDsInferParseYolo     │
-                    │             │  libnvdsinfer_custom_   │
+                    │ ONNX →      │ .pt → ONNX → TensorRT  │
+                    │ TensorRT    │  nvinfer (GIE)          │
+                    │ nvinfer     │  NvDsInferParseYolo     │
+                    │ (GIE)       │  libnvdsinfer_custom_   │
                     │             │    impl_Yolo.so         │
                     └─────────────┴───────────────────────┘
 ```
+
+> **注意**：所有推理均通过 DeepStream 管道完成，不依赖 ultralytics 运行时库。
+> ONNX 导出（`export_yoloV8.py`）需要 ultralytics，但可提前在开发环境中完成。
 
 **关键集成点**（来自 DeepStream-Yolo 项目）：
 
@@ -842,8 +846,9 @@ mengdong_cloud/
 │   ├── main.py             # FastAPI 主入口
 │   ├── config.py           # 配置文件（含 DeepStream 参数）
 │   ├── schemas.py          # 请求/响应数据模型
-│   ├── model_manager.py    # 模型管理器（ONNX 导出 + ultralytics 加载）
-│   ├── inference.py        # 推理辅助函数（图片分析用）
+│   ├── model_manager.py    # 模型管理器（ONNX 导出 + DeepStream 推理）
+│   ├── inference.py        # 推理辅助函数（Detection 数据结构、绘图、解析）
+│   ├── ds_image_infer.py   # DeepStream 单帧图片推理模块
 │   ├── deepstream_config.py # DeepStream 配置文件生成器
 │   ├── routers/            # API 路由
 │   │   ├── abilities.py    # 算法能力接口
@@ -854,7 +859,7 @@ mengdong_cloud/
 │   │   ├── update_analyse.py # 更新分析ID接口
 │   │   └── upload_samples.py # 样本上传接口
 │   └── tasks/              # 后台任务
-│       └── video_processor.py # 视频流处理器（DeepStream 管道 + OpenCV 回退）
+│       └── video_processor.py # 视频流处理器（DeepStream 管道）
 ├── models/                 # 模型文件目录
 │   ├── model_mengdong_raa_adjusted.pt
 │   ├── model_mengdong_small_SRL.pt
@@ -878,14 +883,14 @@ mengdong_cloud/
 服务启动
   │
   ├─ 1. export_yoloV8.py 导出 .pt → .onnx
-  │     （添加 DeepStreamOutput 层）
+  │     （添加 DeepStreamOutput 层，需要 ultralytics，可提前完成）
   │
   ├─ 2. 生成 config_infer_<algCode>.txt
   │     （引用 libnvdsinfer_custom_impl_Yolo.so）
   │
   ├─ 3. 生成 labels_<algCode>.txt
   │
-  └─ 4. 加载 ultralytics 模型（图片推理后端）
+  └─ 4. 检查 DeepStream 图片推理可用性
 
 视频流推理（DeepStream 管道）
   │
@@ -904,7 +909,14 @@ mengdong_cloud/
   │
   └─ 输出 MP4 标注视频
 
-图片推理（ultralytics 后端）
+图片推理（DeepStream 单帧管道）
   │
-  └─ YOLO.predict(image) → 检测结果 JSON
+  ├─ filesrc → jpegdec → videoconvert → nvvideoconvert
+  │     → nvstreammux → nvinfer → fakesink
+  │                       │
+  │                 config_infer_<algCode>.txt（与视频流共用）
+  │                       │
+  │                 NvDsObjectMeta → Detection 列表
+  │
+  └─ 返回检测结果 JSON
 ```
